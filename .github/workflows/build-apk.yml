@@ -13,7 +13,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
@@ -24,16 +23,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Download Gradle
-        run: |
-          curl -L https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip
-          unzip -q gradle.zip
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       - name: Build Debug APK
-        run: ./gradle-8.7/bin/gradle assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VoiceCalculator-debug-apk
+          name: voicecalculator-v2-debug
           path: app/build/outputs/apk/debug/*.apk
