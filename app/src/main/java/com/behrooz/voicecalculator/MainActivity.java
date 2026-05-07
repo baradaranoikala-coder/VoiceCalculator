@@ -4,190 +4,125 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
-
-import java.text.DecimalFormat;
 import java.util.*;
 
 public class MainActivity extends Activity {
-    private static final int REQ_SPEECH = 10;
-    private static final int REQ_AUDIO = 11;
-    private EditText input;
-    private TextView result;
-    private LinearLayout historyBox;
-    private final DecimalFormat fmt = new DecimalFormat("#,###.########");
+    TextView expressionView, resultView, heardView, noteView;
+    String expr = "";
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
-        getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 10);
         buildUi();
     }
 
-    private void buildUi() {
-        ScrollView scroll = new ScrollView(this);
+    void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(32, 36, 32, 36);
-        scroll.addView(root);
+        root.setPadding(24, 28, 24, 24);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
-        TextView title = new TextView(this);
-        title.setText("ماشین حساب صوتی");
-        title.setTextSize(28);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = new TextView(this); title.setText("ماشین حساب صوتی"); title.setTextSize(24); title.setGravity(Gravity.CENTER); root.addView(title, new LinearLayout.LayoutParams(-1,-2));
+        noteView = new TextView(this); noteView.setText("فرمان صوتی فعلاً آنلاین است. بعد از پایان صحبت، محاسبه خودکار انجام می‌شود."); noteView.setTextSize(13); noteView.setGravity(Gravity.CENTER); root.addView(noteView);
+        heardView = new TextView(this); heardView.setText("فرمان شنیده‌شده: —"); heardView.setTextSize(15); heardView.setGravity(Gravity.RIGHT); root.addView(heardView, new LinearLayout.LayoutParams(-1,-2));
+        expressionView = new TextView(this); expressionView.setText("0"); expressionView.setTextSize(30); expressionView.setGravity(Gravity.RIGHT); root.addView(expressionView, new LinearLayout.LayoutParams(-1,-2));
+        resultView = new TextView(this); resultView.setText("نتیجه: —"); resultView.setTextSize(26); resultView.setGravity(Gravity.RIGHT); root.addView(resultView, new LinearLayout.LayoutParams(-1,-2));
 
-        TextView hint = new TextView(this);
-        hint.setText("مثال: دو به اضافه سه، بیست ضربدر چهار، ریشه دوم شانزده، دو به توان سه");
-        hint.setTextSize(15);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, 20, 0, 20);
-        root.addView(hint);
+        Button mic = new Button(this); mic.setText("🎙 فرمان صوتی"); mic.setTextSize(20); root.addView(mic, new LinearLayout.LayoutParams(-1,-2)); mic.setOnClickListener(v -> listen());
 
-        input = new EditText(this);
-        input.setHint("فرمان را بگویید یا تایپ کنید...");
-        input.setTextSize(20);
-        input.setSingleLine(false);
-        input.setMinLines(2);
-        input.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        root.addView(input, new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER);
-        buttons.setPadding(0, 24, 0, 24);
-        root.addView(buttons);
-
-        Button mic = new Button(this);
-        mic.setText("🎤 بگو");
-        buttons.addView(mic, new LinearLayout.LayoutParams(0, -2, 1));
-
-        Button calc = new Button(this);
-        calc.setText("محاسبه");
-        buttons.addView(calc, new LinearLayout.LayoutParams(0, -2, 1));
-
-        Button clear = new Button(this);
-        clear.setText("پاک کردن");
-        buttons.addView(clear, new LinearLayout.LayoutParams(0, -2, 1));
-
-        result = new TextView(this);
-        result.setText("نتیجه: —");
-        result.setTextSize(30);
-        result.setTypeface(Typeface.DEFAULT_BOLD);
-        result.setGravity(Gravity.CENTER);
-        result.setPadding(0, 16, 0, 24);
-        root.addView(result, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView histTitle = new TextView(this);
-        histTitle.setText("تاریخچه");
-        histTitle.setTextSize(20);
-        histTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(histTitle);
-
-        historyBox = new LinearLayout(this);
-        historyBox.setOrientation(LinearLayout.VERTICAL);
-        root.addView(historyBox);
-
-        mic.setOnClickListener(v -> startVoice());
-        calc.setOnClickListener(v -> calculate(input.getText().toString()));
-        clear.setOnClickListener(v -> { input.setText(""); result.setText("نتیجه: —"); });
-        setContentView(scroll);
+        String[][] keys = {{"C","⌫","%","/"},{"7","8","9","*"},{"4","5","6","-"},{"1","2","3","+"},{"0",".","=","="}};
+        for (String[] row: keys) {
+            LinearLayout line = new LinearLayout(this); line.setOrientation(LinearLayout.HORIZONTAL); root.addView(line, new LinearLayout.LayoutParams(-1,-2));
+            for (String k: row) {
+                Button btn = new Button(this); btn.setText(k); btn.setTextSize(22); line.addView(btn, new LinearLayout.LayoutParams(0,120,1)); btn.setOnClickListener(v -> press(((Button)v).getText().toString()));
+            }
+        }
+        setContentView(root);
     }
 
-    private void startVoice() {
-        if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
-            return;
-        }
+    void listen() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) { toast("تشخیص صوتی روی این گوشی فعال نیست"); return; }
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
-        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "فرمان ریاضی را بگویید");
-        try { startActivityForResult(i, REQ_SPEECH); }
-        catch (Exception e) { Toast.makeText(this, "تشخیص گفتار روی این گوشی فعال نیست. لطفاً تایپ کنید.", Toast.LENGTH_LONG).show(); }
+        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "مثلاً بگویید: بیست و پنج ضربدر چهار");
+        try { startActivityForResult(i, 100); } catch(Exception e){ toast("خطا در باز کردن فرمان صوتی"); }
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQ_SPEECH && resultCode == RESULT_OK && data != null) {
+        if (requestCode == 100 && resultCode == RESULT_OK && data != null) {
             ArrayList<String> r = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if (r != null && !r.isEmpty()) { input.setText(r.get(0)); calculate(r.get(0)); }
-        }
-    }
-
-    private void calculate(String text) {
-        try {
-            double value = PersianMath.eval(text);
-            String out = fmt.format(value);
-            result.setText("نتیجه: " + out);
-            addHistory(text + " = " + out);
-        } catch (Exception e) {
-            result.setText("نتیجه: نامشخص");
-            Toast.makeText(this, "فرمان را متوجه نشدم. نمونه: دو به اضافه سه", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void addHistory(String s) {
-        TextView row = new TextView(this);
-        row.setText(s);
-        row.setTextSize(17);
-        row.setPadding(0, 10, 0, 10);
-        historyBox.addView(row, 0);
-    }
-
-    static class PersianMath {
-        static final Map<String, Integer> nums = new HashMap<>();
-        static { String[] names = {"صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده"}; for(int i=0;i<names.length;i++) nums.put(names[i], i); nums.put("بیست",20); nums.put("سی",30); nums.put("چهل",40); nums.put("پنجاه",50); nums.put("شصت",60); nums.put("هفتاد",70); nums.put("هشتاد",80); nums.put("نود",90); nums.put("صد",100); nums.put("دویست",200); nums.put("سیصد",300); nums.put("چهارصد",400); nums.put("پانصد",500); nums.put("ششصد",600); nums.put("هفتصد",700); nums.put("هشتصد",800); nums.put("نهصد",900); }
-
-        static double eval(String raw) throws Exception {
-            String s = normalize(raw);
-            if (s.contains("درصد")) {
-                String[] p = s.split("درصد");
-                double a = parseNumber(p[0]);
-                double b = p.length > 1 && p[1].trim().length() > 0 ? parseNumber(p[1]) : 100;
-                return a * b / 100.0;
+            if (r != null && !r.isEmpty()) {
+                String heard = r.get(0);
+                heardView.setText("فرمان شنیده‌شده: " + heard);
+                expr = wordsToExpression(heard);
+                update();
+                calculate();
             }
-            if (s.contains("ریشه دوم")) return Math.sqrt(parseNumber(s.replace("ریشه دوم", "")));
-            if (s.contains("جذر")) return Math.sqrt(parseNumber(s.replace("جذر", "")));
-            return binary(s, "به توان", Math::pow,
-                    binary(s, "توان", Math::pow,
-                    binary(s, "تقسیم بر", (a,b)->a/b,
-                    binary(s, "تقسیم", (a,b)->a/b,
-                    binary(s, "ضربدر", (a,b)->a*b,
-                    binary(s, "ضرب در", (a,b)->a*b,
-                    binary(s, "ضرب", (a,b)->a*b,
-                    binary(s, "به اضافه", (a,b)->a+b,
-                    binary(s, "اضافه", (a,b)->a+b,
-                    binary(s, "جمع", (a,b)->a+b,
-                    binary(s, "منهای", (a,b)->a-b,
-                    binary(s, "کم", (a,b)->a-b, null))))))))))));
         }
-        interface Op { double apply(double a, double b); }
-        static Double binary(String s, String op, Op f, Double fallback) throws Exception {
-            if (!s.contains(op)) return fallback;
-            String[] p = s.split(op, 2);
-            return f.apply(parseNumber(p[0]), parseNumber(p[1]));
+    }
+
+    void press(String k) {
+        if (k.equals("C")) { expr=""; resultView.setText("نتیجه: —"); update(); return; }
+        if (k.equals("⌫")) { if(expr.length()>0) expr=expr.substring(0,expr.length()-1); update(); return; }
+        if (k.equals("=")) { calculate(); return; }
+        if (k.equals("%")) { expr += "%"; update(); return; }
+        expr += k; update();
+    }
+    void update(){ expressionView.setText(expr.isEmpty()?"0":expr); }
+    void calculate(){ try { double v = eval(expr.replace("%","/100")); resultView.setText("نتیجه: " + fmt(v)); } catch(Exception e){ resultView.setText("نتیجه: قابل محاسبه نیست"); } }
+    String fmt(double v){ if (Math.abs(v - Math.round(v)) < 1e-9) return String.valueOf(Math.round(v)); return String.valueOf(v); }
+    void toast(String s){ Toast.makeText(this,s,Toast.LENGTH_LONG).show(); }
+
+    String norm(String s){
+        char[] fa="۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩".toCharArray(); String en="01234567890123456789";
+        StringBuilder out=new StringBuilder();
+        for(char c:s.toCharArray()){ int idx=new String(fa).indexOf(c); out.append(idx>=0?en.charAt(idx):c); }
+        return out.toString().toLowerCase(Locale.ROOT).replace("،"," ").replace(","," ");
+    }
+    String wordsToExpression(String input){
+        String s = norm(input);
+        s = s.replace("به علاوه", " + ").replace("جمع", " + ").replace("بعلاوه", " + ").replace("اضافه", " + ");
+        s = s.replace("منهای", " - ").replace("تفریق", " - ").replace("کم", " - ");
+        s = s.replace("ضربدر", " * ").replace("ضرب در", " * ").replace("ضرب", " * ").replace("در", " * ").replace("ایکس", " * ");
+        s = s.replace("تقسیم بر", " / ").replace("تقسیم", " / ").replace("بخش بر", " / ");
+        s = s.replace("ممیز", ".");
+        String[] parts = s.trim().split("\\s+");
+        StringBuilder out = new StringBuilder(); ArrayList<String> buf = new ArrayList<>();
+        for(String p: parts){
+            if(p.matches("[+\\-*/]") || p.equals("%")) { appendNumber(out,buf); out.append(p); buf.clear(); }
+            else if(p.matches("[0-9.]+")) { appendNumber(out,buf); out.append(p); }
+            else buf.add(p);
         }
-        static double parseNumber(String phrase) throws Exception {
-            phrase = phrase.trim().replace(" و ", " ");
-            phrase = toEnglishDigits(phrase);
-            try { return Double.parseDouble(phrase.replace(" ", "")); } catch(Exception ignored) {}
-            double total = 0, current = 0;
-            for (String w : phrase.split("\\s+")) {
-                if (w.length()==0) continue;
-                if (w.equals("هزار")) { total += Math.max(1, current) * 1000; current = 0; }
-                else if (w.equals("میلیون")) { total += Math.max(1, current) * 1000000; current = 0; }
-                else if (nums.containsKey(w)) current += nums.get(w);
-                else throw new Exception("unknown number " + w);
-            }
-            return total + current;
-        }
-        static String normalize(String s) { return s.replace('ي','ی').replace('ك','ک').replace("بعلاوه","به اضافه").replace("جمع با","به اضافه").replace("×"," ضرب ").replace("÷"," تقسیم ").trim(); }
-        static String toEnglishDigits(String s) { return s.replace('۰','0').replace('۱','1').replace('۲','2').replace('۳','3').replace('۴','4').replace('۵','5').replace('۶','6').replace('۷','7').replace('۸','8').replace('۹','9').replace('٫','.'); }
+        appendNumber(out,buf);
+        return out.toString();
+    }
+    void appendNumber(StringBuilder out, ArrayList<String> buf){ if(buf.isEmpty()) return; Long n=parseFaNumber(buf); if(n!=null) out.append(n); buf.clear(); }
+    Long parseFaNumber(List<String> w){
+        HashMap<String,Integer> m=new HashMap<>();
+        String[] ones={"صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده"};
+        for(int i=0;i<ones.length;i++)m.put(ones[i],i);
+        m.put("بیست",20);m.put("سی",30);m.put("چهل",40);m.put("پنجاه",50);m.put("شصت",60);m.put("هفتاد",70);m.put("هشتاد",80);m.put("نود",90);
+        m.put("صد",100);m.put("یکصد",100);m.put("دویست",200);m.put("سیصد",300);m.put("چهارصد",400);m.put("پانصد",500);m.put("ششصد",600);m.put("هفتصد",700);m.put("هشتصد",800);m.put("نهصد",900);
+        long total=0, cur=0; boolean found=false;
+        for(String x:w){ if(x.equals("و")) continue; if(x.equals("هزار")){ total += (cur==0?1:cur)*1000; cur=0; found=true; continue;} if(x.equals("میلیون")){ total += (cur==0?1:cur)*1000000; cur=0; found=true; continue;} Integer v=m.get(x); if(v==null) continue; cur+=v; found=true; }
+        return found ? total+cur : null;
+    }
+
+    double eval(String s){
+        ArrayList<String> toks=new ArrayList<>(); String num="";
+        for(char c:s.toCharArray()){ if(Character.isDigit(c)||c=='.') num+=c; else if("+-*/".indexOf(c)>=0){ if(!num.isEmpty()){toks.add(num);num="";} toks.add(String.valueOf(c)); } }
+        if(!num.isEmpty()) toks.add(num);
+        for(int i=1;i<toks.size()-1;){ String op=toks.get(i); if(op.equals("*")||op.equals("/")){ double a=Double.parseDouble(toks.get(i-1)), b=Double.parseDouble(toks.get(i+1)); double r=op.equals("*")?a*b:a/b; toks.set(i-1,String.valueOf(r)); toks.remove(i); toks.remove(i); } else i+=2; }
+        double res=Double.parseDouble(toks.get(0)); for(int i=1;i<toks.size()-1;i+=2){ res += toks.get(i).equals("+")?Double.parseDouble(toks.get(i+1)):-Double.parseDouble(toks.get(i+1)); }
+        return res;
     }
 }
